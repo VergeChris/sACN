@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using Haukcode.Network;
 
 namespace Haukcode.sACN.Model
 {

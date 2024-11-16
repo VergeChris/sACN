@@ -11,10 +11,11 @@ using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 using Haukcode.sACN.Model;
+using VergeAero.Net;
 
 namespace Haukcode.sACN
 {
-    public class SACNClient : IDisposable
+    public class SACNClient : IDisposable, IDMXStream, IListenInterface
     {
         public class SendSocketData
         {
@@ -81,7 +82,7 @@ namespace Haukcode.sACN
             Port = port;
             this.localEndPoint = new IPEndPoint(localAddress, port);
 
-            var receiveBuffer = GC.AllocateArray<byte>(length: ReceiveBufferSize, pinned: true);
+            var receiveBuffer = new byte[ReceiveBufferSize];
             this.receiveBufferMem = receiveBuffer.AsMemory();
 
             this.errorSubject = new Subject<Exception>();
@@ -222,7 +223,7 @@ namespace Haukcode.sACN
             {
                 try
                 {
-                    var result = await this.listenSocket.ReceiveMessageFromAsync(this.receiveBufferMem, SocketFlags.None, _blankEndpoint, this.shutdownCTS.Token);
+                    var result = await this.listenSocket.ReceiveMessageFromAsync(this.receiveBufferMem.ToArray(), SocketFlags.None, _blankEndpoint/*, this.shutdownCTS.Token*/);
 
                     // Capture the timestamp first so it's as accurate as possible
                     double timestampMS = this.clock.Elapsed.TotalMilliseconds;
@@ -294,7 +295,7 @@ namespace Haukcode.sACN
                     var destination = sendData.Destination ?? socketData.Destination;
 
                     var watch = Stopwatch.StartNew();
-                    await socketData.Socket.SendToAsync(sendData.Data.Memory[..sendData.DataLength], SocketFlags.None, destination);
+                    await socketData.Socket.SendToAsync(sendData.Data.Memory[..sendData.DataLength].ToArray(), SocketFlags.None, destination);
                     watch.Stop();
 
                     if (watch.ElapsedMilliseconds > 20)
@@ -352,6 +353,11 @@ namespace Haukcode.sACN
 
             // Add to the list of universes we have joined
             this.dmxUniverses.Add(universeId);
+        }
+
+        public bool IsUniverseJoined(ushort universeId)
+        {
+            return dmxUniverses.Contains(universeId);
         }
 
         public void DropDMXUniverse(ushort universeId)
@@ -583,6 +589,51 @@ namespace Haukcode.sACN
 
             this.listenSocket.Close();
             this.listenSocket.Dispose();
+        }
+
+        private HashSet<IDMXTarget> _dmxTargets = new HashSet<IDMXTarget>();
+        public void RegisterDMXTarget(IDMXTarget target)
+        {
+            _dmxTargets.Add(target);
+        }
+
+        public void RemoveDMXTarget(IDMXTarget target)
+        {
+            _dmxTargets.Remove(target);
+        }
+
+        public void Close()
+        {
+            listenSocket?.Close();
+        }
+
+        public void Open()
+        {
+            
+        }
+
+        public bool IsListening()
+        {
+            return true;
+        }
+
+
+        public static IPAddress GetUniverseAddress(int universe)
+        {
+            if (universe < 0 || universe > 63999)
+                throw new InvalidOperationException("Unable to determine multicast group because the universe must be between 1 and 64000. Universes outside this range are not allowed.");
+
+            byte[] group = new byte[] { 239, 255, 0, 0 };
+
+            group[2] = (byte)((universe >> 8) & 0xff);     //Universe Hi Byte
+            group[3] = (byte)(universe & 0xff);           //Universe Lo Byte
+
+            return new IPAddress(group);
+        }
+
+        public static IPEndPoint GetUniverseEndPoint(int universe, int port)
+        {
+            return new IPEndPoint(GetUniverseAddress(universe), port);
         }
     }
 }
