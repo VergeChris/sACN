@@ -602,6 +602,8 @@ namespace Haukcode.sACN
             _dmxTargets.Remove(target);
         }
 
+        public bool IsOpen => IsListening();
+
         public void Close()
         {
             listenSocket?.Close();
