@@ -223,7 +223,7 @@ namespace Haukcode.sACN
             {
                 try
                 {
-                    var result = await this.listenSocket.ReceiveMessageFromAsync(this.receiveBufferMem.ToArray(), SocketFlags.None, _blankEndpoint/*, this.shutdownCTS.Token*/);
+                    var result = await this.listenSocket.ReceiveFromAsync(this.receiveBufferMem.ToArray(), SocketFlags.None, _blankEndpoint);
 
                     // Capture the timestamp first so it's as accurate as possible
                     double timestampMS = this.clock.Elapsed.TotalMilliseconds;
@@ -243,10 +243,10 @@ namespace Haukcode.sACN
                                 Packet = packet
                             };
 
-                            if (!this.endPointCache.TryGetValue(result.PacketInformation.Address, out var ipEndPoint))
+                            if (!this.endPointCache.TryGetValue(_blankEndpoint.Address, out var ipEndPoint))
                             {
-                                ipEndPoint = new IPEndPoint(result.PacketInformation.Address, Port);
-                                this.endPointCache.Add(result.PacketInformation.Address, ipEndPoint);
+                                ipEndPoint = new IPEndPoint(_blankEndpoint.Address, Port);
+                                this.endPointCache.Add(_blankEndpoint.Address, ipEndPoint);
                             }
 
                             newPacket.Destination = ipEndPoint;
@@ -573,10 +573,13 @@ namespace Haukcode.sACN
 
             try
             {
-                this.listenSocket.Shutdown(SocketShutdown.Both);
+                //this.listenSocket.Shutdown(SocketShutdown.Both);
+                this.listenSocket.Close();
+                this.listenSocket.Dispose();
             }
-            catch
+            catch(Exception e)
             {
+                
             }
 
             if (this.receiveTask?.IsCanceled == false)
